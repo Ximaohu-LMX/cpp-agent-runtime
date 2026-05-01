@@ -1,0 +1,89 @@
+{
+  "session_id": "s1",
+  "status": "success",
+  "steps": [
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "latency_ms": 0,
+          "output": {
+            "expression": "1 + 2 * 3",
+            "result": 7.0
+          },
+          "status": "success"
+        }
+      ],
+      "max_retries": 1,
+      "output": {
+        "expression": "1 + 2 * 3",
+        "result": 7.0
+      },
+      "status": "success",
+      "step_id": "calc_1",
+      "timeout_ms": 1000,
+      "tool": "calculator"
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "latency_ms": 0,
+          "output": {
+            "key": "last_result",
+            "op": "set",
+            "value": {
+              "expression": "1 + 2 * 3",
+              "result": 7.0
+            }
+          },
+          "status": "success"
+        }
+      ],
+      "max_retries": 0,
+      "output": {
+        "key": "last_result",
+        "op": "set",
+        "value": {
+          "expression": "1 + 2 * 3",
+          "result": 7.0
+        }
+      },
+      "status": "success",
+      "step_id": "save_result",
+      "timeout_ms": 1000,
+      "tool": "memory"
+    },
+    {
+      "attempts": [
+        {
+          "attempt": 1,
+          "latency_ms": 0,
+          "output": {
+            "key": "last_result",
+            "op": "get",
+            "value": {
+              "expression": "1 + 2 * 3",
+              "result": 7.0
+            }
+          },
+          "status": "success"
+        }
+      ],
+      "max_retries": 0,
+      "output": {
+        "key": "last_result",
+        "op": "get",
+        "value": {
+          "expression": "1 + 2 * 3",
+          "result": 7.0
+        }
+      },
+      "status": "success",
+      "step_id": "read_result",
+      "timeout_ms": 1000,
+      "tool": "memory"
+    }
+  ],
+  "total_latency_ms": 1
+}

@@ -1,0 +1,34 @@
+{
+  "session_id": "s1",
+  "steps": [
+    {
+      "id": "calc_1",
+      "tool": "calculator",
+      "timeout_ms": 1000,
+      "max_retries": 1,
+      "input": {
+        "expression": "1 + 2 * 3"
+      }
+    },
+    {
+      "id": "save_result",
+      "tool": "memory",
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "key": "last_result",
+        "value_from_previous": true
+      }
+    },
+    {
+      "id": "read_result",
+      "tool": "memory",
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "op": "get",
+        "key": "last_result"
+      }
+    }
+  ]
+}
