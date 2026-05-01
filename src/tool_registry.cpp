@@ -1,6 +1,7 @@
 #include "agent/tool_registry.hpp"
 
 #include <stdexcept>
+#include <iostream>
 
 namespace agent {
 

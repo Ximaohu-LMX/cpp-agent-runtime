@@ -13,6 +13,7 @@
 
 #include "tools/calculator_tool.hpp"
 #include "tools/memory_tool.hpp"
+#include "tools/echo_tool.hpp"
 
 int main(int argc, char** argv) {
     // 获取计划文件路径
@@ -29,6 +30,7 @@ int main(int argc, char** argv) {
         agent::ToolRegistry registry;
         registry.registerTool(std::make_shared<tools::CalculatorTool>());
         registry.registerTool(std::make_shared<tools::MemoryTool>());
+        registry.registerTool(std::make_shared<tools::EchoTool>());
 
         // 创建辅助组件
         agent::SessionManager session_manager;   // 管理会话状态（跨步骤共享数据）

@@ -32,6 +32,7 @@ add_library(agent_runtime
     src/metrics_collector.cpp
     src/tools/calculator_tool.cpp
     src/tools/memory_tool.cpp
+    src/tools/echo_tool.cpp
 )
 
 target_include_directories(agent_runtime

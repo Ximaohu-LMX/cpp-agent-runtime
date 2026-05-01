@@ -2,12 +2,21 @@
   "session_id": "s1",
   "steps": [
     {
+      "id": "echo_test",
+      "tool": "echo",
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "message": "hello agent"
+      }
+    },
+    {
       "id": "calc_1",
       "tool": "calculator",
       "timeout_ms": 1000,
       "max_retries": 1,
       "input": {
-        "expression": "1 + 2 * 3"
+        "expression": "(2+4)/ 3"
       }
     },
     {
