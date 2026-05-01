@@ -2,6 +2,7 @@
 
 #include <string>
 #include <nlohmann/json.hpp>
+#include <vector>
 
 #include "agent/metrics_collector.hpp"
 #include "agent/plan.hpp"
@@ -34,6 +35,13 @@ public:
     ExecutionResult run(const Plan& plan);
 
 private:
+    // 校验 depends_on：重复 step_id、依赖不存在、自依赖、循环依赖
+    void validatePlanDependencies(const Plan& plan) const;
+
+    // 根据 depends_on 构建拓扑分层结果
+    // 每一层中的 step 互相没有依赖，未来可以并行执行
+    std::vector<std::vector<const PlanStep*>> buildExecutionLayers(const Plan& plan) const;
+
     // 执行单个步骤，返回该步骤的结果
     ToolResult executeOneStep(
         const PlanStep& step,              // 当前要执行的步骤

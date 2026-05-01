@@ -11,6 +11,8 @@ struct PlanStep {
     std::string tool;
     nlohmann::json input{nlohmann::json::object()};
 
+    std::vector<std::string> depends_on;
+
     int timeout_ms{1000};
     int max_retries{0};
     std::string fallback_tool;

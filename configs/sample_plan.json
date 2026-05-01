@@ -4,6 +4,7 @@
     {
       "id": "echo_test",
       "tool": "echo",
+      "depends_on": [],
       "timeout_ms": 1000,
       "max_retries": 0,
       "input": {
@@ -11,17 +12,29 @@
       }
     },
     {
-      "id": "calc_1",
+      "id": "calc_a",
       "tool": "calculator",
+      "depends_on": [],
       "timeout_ms": 1000,
       "max_retries": 1,
       "input": {
-        "expression": "(2+4)/ 3"
+        "expression": "1 + 1"
+      }
+    },
+    {
+      "id": "calc_b",
+      "tool": "calculator",
+      "depends_on": [],
+      "timeout_ms": 1000,
+      "max_retries": 1,
+      "input": {
+        "expression": "2 + 2"
       }
     },
     {
       "id": "save_result",
       "tool": "memory",
+      "depends_on": ["calc_b"],
       "timeout_ms": 1000,
       "max_retries": 0,
       "input": {
@@ -32,6 +45,7 @@
     {
       "id": "read_result",
       "tool": "memory",
+      "depends_on": ["save_result"],
       "timeout_ms": 1000,
       "max_retries": 0,
       "input": {

@@ -1,7 +1,13 @@
 #include "agent/tool_executor.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
+#include <functional>
+#include <queue>
+#include <stdexcept>
+#include <unordered_map>
+#include <unordered_set>
 #include <spdlog/spdlog.h>
 
 namespace agent {
@@ -31,20 +37,192 @@ ToolExecutor::ToolExecutor(
       trace_logger_(trace_logger),
       metrics_collector_(metrics_collector) {}
 
+
+// ==========================================
+// 验证计划中步骤的依赖关系是否合法
+// 在执行前调用，发现问题直接抛异常，阻止执行
+// ==========================================
+void ToolExecutor::validatePlanDependencies(const Plan& plan) const {
+
+    // ==========================================
+    // 第一阶段：构建步骤索引，检查 id 合法性
+    // ==========================================
+    std::unordered_map<std::string, const PlanStep*> step_map;
+
+    for (const auto& step : plan.steps) {
+        // id 不能为空
+        if (step.id.empty()) {
+            throw std::runtime_error("step id cannot be empty");
+        }
+        // id 不能重复
+        if (step_map.count(step.id) > 0) {
+            throw std::runtime_error("duplicate step id: " + step.id);
+        }
+        // 存入索引：id -> 步骤指针
+        step_map[step.id] = &step;
+    }
+
+    // ==========================================
+    // 第二阶段：检查每个步骤的依赖是否合法
+    // ==========================================
+    for (const auto& step : plan.steps) {
+        for (const auto& dep : step.depends_on) {
+            // 依赖的步骤必须存在
+            if (step_map.count(dep) == 0) {
+                throw std::runtime_error(
+                    "step " + step.id + " depends on unknown step: " + dep
+                );
+            }
+            // 不能依赖自己
+            if (dep == step.id) {
+                throw std::runtime_error(
+                    "step cannot depend on itself: " + step.id
+                );
+            }
+        }
+    }
+
+    // ==========================================
+    // 第三阶段：用 DFS 检测循环依赖
+    // 比如 A 依赖 B，B 依赖 C，C 又依赖 A，这种情况无法执行
+    // ==========================================
+    enum class VisitState {
+        Unvisited,  // 还没访问过
+        Visiting,   // 正在访问中（在当前 DFS 路径上）
+        Visited     // 已经访问完毕（确认无环）
+    };
+
+    // 初始化所有步骤为未访问
+    std::unordered_map<std::string, VisitState> states;
+    for (const auto& step : plan.steps) {
+        states[step.id] = VisitState::Unvisited;
+    }
+
+    // DFS 递归函数
+    std::function<void(const std::string&)> dfs =
+        [&](const std::string& step_id) {
+            auto state = states[step_id];
+
+            // 如果当前节点正在访问中又被访问到，说明有环
+            if (state == VisitState::Visiting) {
+                throw std::runtime_error(
+                    "cycle detected in plan dependencies near step: " + step_id
+                );
+            }
+
+            // 已经确认无环的节点，跳过
+            if (state == VisitState::Visited) {
+                return;
+            }
+
+            // 标记为正在访问
+            states[step_id] = VisitState::Visiting;
+
+            // 递归检查所有依赖
+            const auto* step = step_map.at(step_id);
+            for (const auto& dep : step->depends_on) {
+                dfs(dep);
+            }
+
+            // 所有依赖都检查完了，标记为已完成
+            states[step_id] = VisitState::Visited;
+        };
+
+    // 对每个步骤启动 DFS
+    for (const auto& step : plan.steps) {
+        dfs(step.id);
+    }
+}
+
+std::vector<std::vector<const PlanStep*>>
+ToolExecutor::buildExecutionLayers(const Plan& plan) const {
+    // 阶段 1：建立 step_id -> step 的映射，方便后续通过 id 找到 step
+    std::unordered_map<std::string, const PlanStep*> step_map;
+
+    for (const auto& step : plan.steps) {
+        step_map[step.id] = &step;
+    }
+
+    // 阶段 2：构建入度表和邻接表
+    // indegree[step_id] 表示当前 step 还有多少依赖没有完成
+    // graph[dep] 表示 dep 完成后，可以解锁哪些后续 step
+    std::unordered_map<std::string, int> indegree;
+    std::unordered_map<std::string, std::vector<std::string>> graph;
+
+    for (const auto& step : plan.steps) {
+        indegree[step.id] = 0;
+    }
+
+    for (const auto& step : plan.steps) {
+        for (const auto& dep : step.depends_on) {
+            graph[dep].push_back(step.id);
+            indegree[step.id]++;
+        }
+    }
+
+    // 阶段 3：找出第一层，也就是没有任何依赖的 step
+    std::vector<std::string> current_layer;
+
+    for (const auto& step : plan.steps) {
+        if (indegree[step.id] == 0) {
+            current_layer.push_back(step.id);
+        }
+    }
+
+    std::vector<std::vector<const PlanStep*>> layers;
+    std::size_t visited_count = 0;
+
+    // 阶段 4：逐层拓扑遍历
+    // 当前层执行完成后，减少后继节点的入度
+    // 入度变成 0 的节点进入下一层
+    while (!current_layer.empty()) {
+        std::vector<const PlanStep*> layer_steps;
+        std::vector<std::string> next_layer;
+
+        for (const auto& step_id : current_layer) {
+            layer_steps.push_back(step_map.at(step_id));
+            visited_count++;
+
+            for (const auto& next_step_id : graph[step_id]) {
+                indegree[next_step_id]--;
+
+                if (indegree[next_step_id] == 0) {
+                    next_layer.push_back(next_step_id);
+                }
+            }
+        }
+
+        layers.push_back(std::move(layer_steps));
+        current_layer = std::move(next_layer);
+    }
+
+    // 阶段 5：理论上 validatePlanDependencies 已经检查过环
+    // 这里再加一层保护，防止未来修改校验逻辑后出现漏检
+    if (visited_count != plan.steps.size()) {
+        throw std::runtime_error("failed to build execution layers: cycle may exist");
+    }
+
+    return layers;
+}
+
 /*
     run() 开始
+      ├─ 验证依赖关系（id 合法性、依赖存在性、循环依赖检测）
       ├─ 初始化 session、trace
-      ├─ for 每个 step:
-      │    └─ executeOneStep()
-      │         ├─ for 每次尝试 (1 到 max_retries+1):
-      │         │    ├─ 查工具 → 找不到就 break
-      │         │    ├─ 执行工具
-      │         │    ├─ 检查超时
-      │         │    └─ 成功就 return，失败继续重试
-      │         └─ 全部失败 → 尝试 fallback 工具
-      │              └─ 成功就 return，失败就返回错误
-      │    ├─ 步骤成功 → 存结果到 session，继续下一步
-      │    └─ 步骤失败 → 记录错误，break 跳出循环
+      ├─ 构建拓扑分层（buildExecutionLayers）
+      ├─ for 每个 Layer:
+      │    ├─ for Layer 内每个 step:
+      │    │    └─ executeOneStep()
+      │    │         ├─ for 每次尝试 (1 到 max_retries+1):
+      │    │         │    ├─ 查工具 → 找不到就 break
+      │    │         │    ├─ 执行工具
+      │    │         │    ├─ 检查超时
+      │    │         │    └─ 成功就 return，失败继续重试
+      │    │         └─ 全部失败 → 尝试 fallback 工具
+      │    │              └─ 成功就 return，失败就返回错误
+      │    │    ├─ 步骤成功 → 存结果到 session（_last_output + output.step_id）
+      │    │    └─ 步骤失败 → 记录错误，标记 should_stop
+      │    └─ should_stop → break 跳出 Layer 循环
       ├─ 计算总耗时
       ├─ 记录 metrics、写入 trace 日志
       └─ 返回 ExecutionResult
@@ -52,65 +230,100 @@ ToolExecutor::ToolExecutor(
 
 ExecutionResult ToolExecutor::run(const Plan& plan) {
 
-    //===== 1.初始化 =====
+    // ==========================================
+    // 第一阶段：初始化
+    // ==========================================
+
+    // 验证依赖关系：id 合法性、依赖存在性、循环依赖检测
+    validatePlanDependencies(plan);
+
     ExecutionResult execution_result;
+    const auto run_start = nowMs();
 
-    const auto run_start = nowMs(); // 返回当前时间的毫秒数
-
+    // 确保 session 存在，初始化 trace 结构
     session_manager_.createSessionIfNotExists(plan.session_id);
 
     nlohmann::json trace;
     trace["session_id"] = plan.session_id;
     trace["status"] = "running";
     trace["steps"] = nlohmann::json::array();
+    trace["layers"] = nlohmann::json::array();
 
-    session_manager_.appendEvent(plan.session_id, {
-        {"type", "run_started"}
-    });
+    session_manager_.appendEvent(plan.session_id, {{"type", "run_started"}});
+
+    // 根据 depends_on 构建拓扑分层（DAG）
+    // 例如：Layer 0: [calc_a, calc_b, echo_test]  Layer 1: [save_result]  Layer 2: [read_result]
+    const auto layers = buildExecutionLayers(plan);
 
     nlohmann::json last_output = nlohmann::json::object();
+    bool should_stop = false;
 
-    // ===== 2.每一步循环 ======
-    for (const auto& step : plan.steps) {
-        nlohmann::json step_trace;
-        ToolResult step_result = executeOneStep(step, plan.session_id, step_trace); //每步执行
+    // ==========================================
+    // 第二阶段：按 Layer 顺序执行
+    // ==========================================
+    // 同一 Layer 内的步骤互不依赖，当前为顺序执行
+    // 将来做并行只需把 Layer 内的 for 改为线程池即可
 
-        trace["steps"].push_back(step_trace);
+    for (std::size_t layer_index = 0; layer_index < layers.size(); ++layer_index) {
+        nlohmann::json layer_trace;
+        layer_trace["layer_index"] = layer_index;
+        layer_trace["steps"] = nlohmann::json::array();
 
-        // 步骤失败时：把错误信息记录下来，往 session 追加 `step_failed` 事件，立刻 break 跳出循环，后续步骤不再执行。
-        if (!step_result.success) {
-            execution_result.success = false;
-            execution_result.error = step_result.error;
-            execution_result.output = last_output;
+        spdlog::info("Executing layer {}, step_count={}", layer_index, layers[layer_index].size());
+
+        for (const PlanStep* step_ptr : layers[layer_index]) {
+            const PlanStep& step = *step_ptr;
+
+            // ---- 执行单个步骤 ----
+            nlohmann::json step_trace;
+            ToolResult step_result = executeOneStep(step, plan.session_id, step_trace);
+
+            trace["steps"].push_back(step_trace);       // 兼容旧的平铺 trace
+            layer_trace["steps"].push_back(step_trace);  // 新的分层 trace
+
+            // ---- 步骤失败：记录错误，标记停止 ----
+            if (!step_result.success) {
+                execution_result.success = false;
+                execution_result.error = step_result.error;
+                execution_result.output = last_output;
+
+                session_manager_.appendEvent(plan.session_id, {
+                    {"type", "step_failed"},
+                    {"layer_index", layer_index},
+                    {"step_id", step.id},
+                    {"tool", step.tool},
+                    {"error", step_result.error}
+                });
+
+                should_stop = true;
+                break;
+            }
+
+            // ---- 步骤成功：保存输出 ----
+            last_output = step_result.output;
+            session_manager_.setValue(plan.session_id, "_last_output", last_output);           // 兼容旧的 value_from_previous
+            session_manager_.setValue(plan.session_id, "output." + step.id, step_result.output); // 按 step id 存储，为并行做准备
 
             session_manager_.appendEvent(plan.session_id, {
-                {"type", "step_failed"},
+                {"type", "step_succeeded"},
+                {"layer_index", layer_index},
                 {"step_id", step.id},
                 {"tool", step.tool},
-                {"error", step_result.error}
+                {"output", step_result.output}
             });
 
-            break;
+            execution_result.success = true;
+            execution_result.output = last_output;
         }
 
-        //步骤成功时：把输出存到 `last_output`，同时写入 SessionManager 的 `_last_output` 键
-        // 下一步会使用 `value_from_previous` 取到上一步结果
-        // 追加 `step_succeeded` 事件，继续下一步。
-        last_output = step_result.output;
-        session_manager_.setValue(plan.session_id, "_last_output", last_output); // 共享结果
+        trace["layers"].push_back(layer_trace);
 
-        session_manager_.appendEvent(plan.session_id, {
-            {"type", "step_succeeded"},
-            {"step_id", step.id},
-            {"tool", step.tool},
-            {"output", step_result.output}
-        });
-
-        execution_result.success = true;
-        execution_result.output = last_output; //json记录
+        if (should_stop) break;  // 当前 Layer 有步骤失败，不再执行后续 Layer
     }
 
-    // ====== 3.计算总耗时，记录 metrics、写入 trace 日志 =======
+    // ==========================================
+    // 第三阶段：收尾，记录总耗时和指标
+    // ==========================================
     const auto run_latency_ms = nowMs() - run_start;
 
     trace["status"] = execution_result.success ? "success" : "failed";
@@ -126,7 +339,7 @@ ExecutionResult ToolExecutor::run(const Plan& plan) {
         {"latency_ms", run_latency_ms}
     });
 
-    metrics_collector_.recordRun(execution_result.success, run_latency_ms); // 记录成功状态和运行时间
+    metrics_collector_.recordRun(execution_result.success, run_latency_ms);
     trace_logger_.logTrace(trace);
 
     execution_result.trace = trace;
@@ -134,6 +347,7 @@ ExecutionResult ToolExecutor::run(const Plan& plan) {
 
     return execution_result;
 }
+
 
 ToolResult ToolExecutor::executeOneStep(
     const PlanStep& step,

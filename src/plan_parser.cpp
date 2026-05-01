@@ -52,6 +52,20 @@ Plan PlanParser::parseJson(const nlohmann::json& json_plan) const {
             ? json_step["input"]
             : nlohmann::json::object();
 
+        if (json_step.contains("depends_on")) {
+            if (!json_step["depends_on"].is_array()) {
+                throw std::runtime_error("step.depends_on must be an array");
+            }
+
+            for (const auto& dep : json_step["depends_on"]) {
+                if (!dep.is_string()) {
+                    throw std::runtime_error("each item in depends_on must be a string");
+                }
+
+                step.depends_on.push_back(dep.get<std::string>());
+            }
+        }
+
         step.timeout_ms = json_step.value("timeout_ms", 1000);
         step.max_retries = json_step.value("max_retries", 0);
         step.fallback_tool = json_step.value("fallback_tool", "");
