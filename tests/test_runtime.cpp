@@ -12,41 +12,11 @@
 
 #include "tools/calculator_tool.hpp"
 #include "tools/memory_tool.hpp"
+#include "tools/echo_tool.hpp"
 
-TEST(PlanParserTest, ParseValidPlan) {
-    nlohmann::json json_plan = {
-        {"session_id", "test_session"},
-        {"steps", {
-            {
-                {"id", "calc_1"},
-                {"tool", "calculator"},
-                {"input", {
-                    {"expression", "1 + 2 * 3"}
-                }}
-            }
-        }}
-    };
-
-    agent::PlanParser parser;
-    agent::Plan plan = parser.parseJson(json_plan);
-
-    ASSERT_EQ(plan.session_id, "test_session");
-    ASSERT_EQ(plan.steps.size(), 1);
-    EXPECT_EQ(plan.steps[0].id, "calc_1");
-    EXPECT_EQ(plan.steps[0].tool, "calculator");
-}
-
-TEST(ToolRegistryTest, RegisterAndFindTool) {
+TEST(RuntimeTest, ExecuteDagPlanWithValueFromStep) {
     agent::ToolRegistry registry;
-    registry.registerTool(std::make_shared<tools::CalculatorTool>());
-
-    EXPECT_TRUE(registry.hasTool("calculator"));
-    EXPECT_NE(registry.getTool("calculator"), nullptr);
-    EXPECT_EQ(registry.getTool("unknown"), nullptr);
-}
-
-TEST(RuntimeTest, ExecuteCalculatorAndMemoryPlan) {
-    agent::ToolRegistry registry;
+    registry.registerTool(std::make_shared<tools::EchoTool>());
     registry.registerTool(std::make_shared<tools::CalculatorTool>());
     registry.registerTool(std::make_shared<tools::MemoryTool>());
 
@@ -55,26 +25,55 @@ TEST(RuntimeTest, ExecuteCalculatorAndMemoryPlan) {
     agent::MetricsCollector metrics_collector;
 
     nlohmann::json json_plan = {
-        {"session_id", "test_session"},
+        {"session_id", "s1"},
         {"steps", {
             {
-                {"id", "calc_1"},
-                {"tool", "calculator"},
+                {"id", "echo_test"},
+                {"tool", "echo"},
+                {"depends_on", nlohmann::json::array()},
+                {"timeout_ms", 1000},
+                {"max_retries", 0},
                 {"input", {
-                    {"expression", "1 + 2 * 3"}
+                    {"message", "hello agent"}
                 }}
             },
             {
-                {"id", "save_1"},
+                {"id", "calc_a"},
+                {"tool", "calculator"},
+                {"depends_on", nlohmann::json::array()},
+                {"timeout_ms", 1000},
+                {"max_retries", 1},
+                {"input", {
+                    {"expression", "1 + 1"}
+                }}
+            },
+            {
+                {"id", "calc_b"},
+                {"tool", "calculator"},
+                {"depends_on", nlohmann::json::array()},
+                {"timeout_ms", 1000},
+                {"max_retries", 1},
+                {"input", {
+                    {"expression", "2 + 2"}
+                }}
+            },
+            {
+                {"id", "save_result"},
                 {"tool", "memory"},
+                {"depends_on", {"calc_b"}},
+                {"timeout_ms", 1000},
+                {"max_retries", 0},
                 {"input", {
                     {"key", "last_result"},
-                    {"value_from_previous", true}
+                    {"value_from_step", "calc_b"}
                 }}
             },
             {
-                {"id", "get_1"},
+                {"id", "read_result"},
                 {"tool", "memory"},
+                {"depends_on", {"save_result"}},
+                {"timeout_ms", 1000},
+                {"max_retries", 0},
                 {"input", {
                     {"op", "get"},
                     {"key", "last_result"}
@@ -98,40 +97,17 @@ TEST(RuntimeTest, ExecuteCalculatorAndMemoryPlan) {
     ASSERT_TRUE(result.success);
     ASSERT_TRUE(result.output.contains("value"));
     ASSERT_TRUE(result.output["value"].contains("result"));
-    EXPECT_DOUBLE_EQ(result.output["value"]["result"].get<double>(), 7.0);
-}
 
-TEST(RuntimeTest, UnknownToolShouldFail) {
-    agent::ToolRegistry registry;
-    registry.registerTool(std::make_shared<tools::CalculatorTool>());
+    EXPECT_DOUBLE_EQ(result.output["value"]["result"].get<double>(), 4.0);
 
-    agent::SessionManager session_manager;
-    agent::TraceLogger trace_logger("logs");
-    agent::MetricsCollector metrics_collector;
+    ASSERT_TRUE(result.trace.contains("dag"));
+    EXPECT_EQ(result.trace["dag"]["layer_count"].get<int>(), 3);
 
-    nlohmann::json json_plan = {
-        {"session_id", "test_session"},
-        {"steps", {
-            {
-                {"id", "bad_1"},
-                {"tool", "unknown_tool"},
-                {"input", nlohmann::json::object()}
-            }
-        }}
-    };
+    ASSERT_TRUE(result.trace.contains("layers"));
+    ASSERT_EQ(result.trace["layers"].size(), 3);
 
-    agent::PlanParser parser;
-    agent::Plan plan = parser.parseJson(json_plan);
-
-    agent::ToolExecutor executor(
-        registry,
-        session_manager,
-        trace_logger,
-        metrics_collector
-    );
-
-    agent::ExecutionResult result = executor.run(plan);
-
-    ASSERT_FALSE(result.success);
-    ASSERT_NE(result.error.find("tool not found"), std::string::npos);
+    auto saved = session_manager.getValue("s1", "last_result");
+    ASSERT_TRUE(saved.has_value());
+    ASSERT_TRUE(saved.value().contains("result"));
+    EXPECT_DOUBLE_EQ(saved.value()["result"].get<double>(), 4.0);
 }

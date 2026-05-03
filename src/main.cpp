@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
 
         // 创建辅助组件
         agent::SessionManager session_manager;   // 管理会话状态（跨步骤共享数据）
-        agent::TraceLogger trace_logger("logs"); // 记录执行轨迹（每步做了什么）
+        agent::TraceLogger trace_logger("logs"); // 记录执行轨迹（每步做了什么） 参数：log_dir
         agent::MetricsCollector metrics_collector; // 收集性能指标（耗时等）
 
         // 解析 JSON 计划
@@ -63,11 +63,11 @@ int main(int argc, char** argv) {
 
         std::cout << "\noutput:\n" << result.output.dump(2) << "\n";
         std::cout << "\ntrace:\n" << result.trace.dump(2) << "\n";
-        std::cout << "\nmetrics:\n" << result.metrics.dump(2) << "\n";
-
-        std::cout << "\nsession:\n"
-                  << session_manager.dumpSession(plan.session_id).dump(2)
-                  << "\n";
+//        std::cout << "\nmetrics:\n" << result.metrics.dump(2) << "\n";
+//
+//        std::cout << "\nsession:\n"
+//                  << session_manager.dumpSession(plan.session_id).dump(2)
+//                  << "\n";
 
         return result.success ? 0 : 1;
     } catch (const std::exception& ex) {

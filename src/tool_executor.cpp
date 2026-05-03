@@ -248,12 +248,30 @@ ExecutionResult ToolExecutor::run(const Plan& plan) {
     trace["status"] = "running";
     trace["steps"] = nlohmann::json::array();
     trace["layers"] = nlohmann::json::array();
+    trace["dag"] = nlohmann::json::object();
 
     session_manager_.appendEvent(plan.session_id, {{"type", "run_started"}});
 
     // 根据 depends_on 构建拓扑分层（DAG）
     // 例如：Layer 0: [calc_a, calc_b, echo_test]  Layer 1: [save_result]  Layer 2: [read_result]
-    const auto layers = buildExecutionLayers(plan);
+    const auto layers = buildExecutionLayers(plan); // std::vector<std::vector<const PlanStep*>>
+
+    // 分层信息写入trace["dag"]
+    trace["dag"]["layer_count"] = layers.size();
+    trace["dag"]["layer_sizes"] = nlohmann::json::array();
+    trace["dag"]["edges"] = nlohmann::json::array();
+    for (const auto& layer : layers) {
+        trace["dag"]["layer_sizes"].push_back(layer.size());
+        for(const auto& p : layer) {
+            if(!p->depends_on.empty()) {
+                // 非空，写入边 依赖到自己
+                for(const auto& dep : p->depends_on) {
+                    trace["dag"]["edges"].push_back({{"from", dep}, {"to", p->id}});
+                }
+            }
+        }
+    }
+
 
     nlohmann::json last_output = nlohmann::json::object();
     bool should_stop = false;
@@ -301,7 +319,7 @@ ExecutionResult ToolExecutor::run(const Plan& plan) {
 
             // ---- 步骤成功：保存输出 ----
             last_output = step_result.output;
-            session_manager_.setValue(plan.session_id, "_last_output", last_output);           // 兼容旧的 value_from_previous
+            // session_manager_.setValue(plan.session_id, "_last_output", last_output);  //旧的 value_from_previous,不需要了
             session_manager_.setValue(plan.session_id, "output." + step.id, step_result.output); // 按 step id 存储，为并行做准备
 
             session_manager_.appendEvent(plan.session_id, {

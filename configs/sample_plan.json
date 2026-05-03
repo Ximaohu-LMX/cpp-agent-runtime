@@ -39,7 +39,7 @@
       "max_retries": 0,
       "input": {
         "key": "last_result",
-        "value_from_previous": true
+        "value_from_step": "calc_b"
       }
     },
     {

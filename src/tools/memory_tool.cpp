@@ -44,19 +44,25 @@ agent::ToolResult MemoryTool::execute(
     if (op == "set") {
         nlohmann::json value;
 
-        // "value_from_previous"记录是否依赖上一步取值，后续可以改进并行
-        if (input.value("value_from_previous", false)) {
-            // 来源一：取上一步的执行结果（ToolExecutor 存在 _last_output 里）
-            auto previous = context.session_manager.getValue(
-                context.session_id,
-                "_last_output"
-            );
-
-            if (!previous.has_value()) {
-                return agent::ToolResult::fail("no previous output found");
+        if (input.contains("value_from_step")) {
+            // 新增：来源一：value_from_step，指定的上一步依赖数据，用于并行
+            if (!input["value_from_step"].is_string()) {
+                return agent::ToolResult::fail("value_from_step must be a string");
             }
+            const std::string step_id = input["value_from_step"].get<std::string>();
 
-            value = previous.value();
+            auto v = context.session_manager.getValue(
+                context.session_id,
+                "output." + step_id   // 原"_last_output"
+            );
+            // 没有值报错
+            if (!v.has_value()) {
+                return agent::ToolResult::fail(
+                    "no output found for step: " + step_id
+                );
+            }
+            value = v.value();
+
         } else if (input.contains("value")) {
             // 来源二：直接从 input 中指定值
             value = input["value"];

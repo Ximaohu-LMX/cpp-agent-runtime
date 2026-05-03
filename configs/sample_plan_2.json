@@ -1,0 +1,45 @@
+{
+  "session_id": "s1",
+  "steps": [
+    {
+      "id": "A",
+      "tool": "echo",
+      "depends_on": [],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "message": "A"
+      }
+    },
+    {
+      "id": "B",
+      "tool": "echo",
+      "depends_on": ["A"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "message": "B"
+      }
+    },
+    {
+      "id": "C",
+      "tool": "echo",
+      "depends_on": ["A"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "message": "C"
+      }
+    },
+    {
+      "id": "D",
+      "tool": "echo",
+      "depends_on": ["B"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "message": "D"
+      }
+    }
+  ]
+}
