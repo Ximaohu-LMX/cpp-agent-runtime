@@ -20,7 +20,7 @@ public:
 
     std::optional<nlohmann::json> getValue(
         const std::string& session_id,
-        const std::string& key
+        const std::string& key  // 取某一步输出："output." + step_id
     ) const;
 
     void appendEvent(

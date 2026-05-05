@@ -73,22 +73,36 @@ depends_on 字段
 ### 三阶段：交互式推荐场景建模
 
 目标：从“通用 Agent Runtime”进入“AI 助手推荐系统”业务场景。
+（思路更新：不再重点做自然语言关键词解析，默认LLM传回结构化信息，然后将其转成推荐系统可用的标准化偏好。）
 
+去掉：
+```text
+QueryParserTool
+FeedbackParserTool 的自然语言关键词解析
+```
 需要实现：
 
 ```text
-UserQueryTool / QueryParser
+StructuredPreferenceTool
+PreferenceUpdateTool
 PreferenceManager
-FeedbackParser
-SessionPreference
+标签标准化 / 校验
+```
+模块职责：
+```text
+StructuredPreferenceTool：接收 LLM 输出的结构化偏好
+PreferenceUpdateTool：将偏好增量写入 PreferenceManager
+PreferenceManager：负责合并、去重、负反馈覆盖正反馈
+TagNormalizer：负责中文 / 别名标签到标准标签的映射
 ```
 
 核心能力：
 
 ```text
-解析用户模糊需求
-保存用户偏好
-识别正反馈 / 负反馈
+接收结构化用户需求 / 反馈
+标准化标签与类别
+保存多轮用户偏好
+处理正反馈 / 负反馈
 将多轮对话状态转成推荐约束
 ```
 
@@ -101,6 +115,41 @@ SessionPreference
 用户：不要课程项目，想看真实工程一点的
 系统：降低“课程项目”权重，提高“工程实践 / 系统设计”权重
 ```
+对应plan：
+```json
+{
+  "id": "update_preference",
+  "tool": "preference_update",
+  "input": {
+    "preference_delta": {
+      "positive_tags": ["工程实践", "C++后端"],
+      "negative_tags": ["课程"]
+    }
+  }
+}
+```
+------
+### 原六阶段提前：DAG 数据传递与推荐链路骨架
+目标：在进入召回之前，先把工具间数据流打通，让后续每个工具天然跑在 DAG 里，避免返工。
+
+需要实现：
+```text
+按 step_id 保存输出
+value_from_step / input_from_step
+MergeCandidatesTool（空壳，先定义接口）
+ResponseBuilderTool（空壳，先定义接口）
+```
+
+典型执行图（此时工具内部可以是 mock）：
+```text
+structured_preference
+      ↓
+vector_recall ─┐
+keyword_recall ├── merge_candidates ── rank ── rerank ── response
+hot_recall    ─┘
+```
+后续四、五阶段的工具直接在 DAG 中开发，不需要临时串联方案
+MergeCandidatesTool / ResponseBuilderTool 先占位，后续填实现即可
 
 ------
 
@@ -167,7 +216,7 @@ TopK 截断
 
 ------
 
-### 六阶段：推荐链路 DAG 化
+### 六阶段：推荐链路 DAG 化（已提前）
 
 目标：把推荐系统链路放进 DAG Runtime。
 
@@ -204,8 +253,27 @@ value_from_step / input_from_step
 std::async 或线程池
 并发安全的 SessionManager
 并发安全的 Trace / Metrics
+PreferenceManager 锁粒度优化
 失败策略
 超时策略
+```
+
+（补充）PreferenceManager 锁优化说明：
+```text
+现状：单个 std::mutex 保护整个 preferences_ 哈希表，所有读写串行。
+观察：同一 session 不会并发（DAG 中同 session 的步骤不会同 layer 写偏好），
+      真实竞争只发生在不同 session 同时操作 preferences_ 哈希表。
+
+优化方向：
+  1. 存储改为 unordered_map<string, unique_ptr<Preference>>，
+     使 Preference 指针在 rehash 时保持稳定
+  2. 外层用 std::shared_mutex 仅保护哈希表本身：
+       - find 走 shared lock
+       - 新 session 的 insert 走 exclusive lock
+  3. 拿到 Preference* 后释放外层锁，直接读写；
+     因同 session 不并发，Preference 内部无需再加锁
+
+效果：写路径除首次 insert 外几乎无锁，跨 session 读写完全并行。
 ```
 
 推荐场景里非常适合：
@@ -252,7 +320,7 @@ Agent 工程化
 
 ### 九阶段：EvalRunner 自动化评测
 
-目标：证明系统有效，不只是 Demo。
+目标：基于五阶段搭建的 EvalRunner 骨架，补全用例和报告生成。
 ```text
 eval_cases.json
 EvalRunner

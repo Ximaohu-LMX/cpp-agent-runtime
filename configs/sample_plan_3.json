@@ -1,0 +1,57 @@
+{
+  "session_id": "s_recommend_1",
+  "steps": [
+    {
+      "id": "normalize_initial_preference",
+      "tool": "structured_preference",
+      "depends_on": [],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_delta": {
+          "last_query": "我想看一些偏 C++ 工程的视频",
+          "positive_tags": ["C++后端", "工程实践"],
+          "negative_tags": [],
+          "preferred_categories": ["视频"],
+          "rejected_categories": []
+        }
+      }
+    },
+    {
+      "id": "update_initial_preference",
+      "tool": "preference_update",
+      "depends_on": ["normalize_initial_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_from_step": "normalize_initial_preference"
+      }
+    },
+    {
+      "id": "normalize_feedback_preference",
+      "tool": "structured_preference",
+      "depends_on": ["update_initial_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_delta": {
+          "last_query": "不要课程项目，想看真实工程一点的",
+          "positive_tags": ["真实工程", "系统设计"],
+          "negative_tags": ["课程项目", "入门"],
+          "preferred_categories": ["工程实践"],
+          "rejected_categories": ["课程"]
+        }
+      }
+    },
+    {
+      "id": "update_feedback_preference",
+      "tool": "preference_update",
+      "depends_on": ["normalize_feedback_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_from_step": "normalize_feedback_preference"
+      }
+    }
+  ]
+}

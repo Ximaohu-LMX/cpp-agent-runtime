@@ -30,6 +30,10 @@ add_library(agent_runtime
     src/session_manager.cpp
     src/trace_logger.cpp
     src/metrics_collector.cpp
+    src/preference_manager.cpp
+    src/tag_normalizer.cpp
+    src/tools/structured_preference_tool.cpp
+    src/tools/preference_update_tool.cpp
     src/tools/calculator_tool.cpp
     src/tools/memory_tool.cpp
     src/tools/echo_tool.cpp

@@ -10,6 +10,7 @@
 #include "agent/session_manager.hpp"
 #include "agent/tool_registry.hpp"
 #include "agent/trace_logger.hpp"
+#include "agent/preference_manager.hpp"
 
 namespace agent {
 
@@ -27,6 +28,7 @@ public:
     ToolExecutor(
         ToolRegistry& registry,           // 工具注册表，用来查找工具
         SessionManager& session_manager,   // 会话管理器，管理跨步骤的共享状态
+        PreferenceManager& preference_manager, // 多轮偏好状态，推荐系统业务，保存用户当前 session 的推荐偏好
         TraceLogger& trace_logger,         // 轨迹日志器，记录执行过程
         MetricsCollector& metrics_collector // 指标收集器，记录耗时等性能数据
     );
@@ -54,6 +56,7 @@ private:
     SessionManager& session_manager_;      // 会话管理器的引用
     TraceLogger& trace_logger_;            // 轨迹日志器的引用
     MetricsCollector& metrics_collector_;  // 指标收集器的引用
+    PreferenceManager& preference_manager_;// 偏好管理器的引用
 };
 
 } // namespace agent

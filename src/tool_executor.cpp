@@ -29,11 +29,13 @@ std::uint64_t nowMs() {
 ToolExecutor::ToolExecutor(
     ToolRegistry& registry,
     SessionManager& session_manager,
+    PreferenceManager& preference_manager,
     TraceLogger& trace_logger,
     MetricsCollector& metrics_collector
 )
     : registry_(registry),
       session_manager_(session_manager),
+      preference_manager_(preference_manager),
       trace_logger_(trace_logger),
       metrics_collector_(metrics_collector) {}
 
@@ -242,6 +244,7 @@ ExecutionResult ToolExecutor::run(const Plan& plan) {
 
     // 确保 session 存在，初始化 trace 结构
     session_manager_.createSessionIfNotExists(plan.session_id);
+    preference_manager_.createSessionIfNotExists(plan.session_id);
 
     nlohmann::json trace;
     trace["session_id"] = plan.session_id;
@@ -409,7 +412,8 @@ ToolResult ToolExecutor::executeOneStep(
         try {
             ToolContext context{
                 .session_id = session_id,
-                .session_manager = session_manager_
+                .session_manager = session_manager_,
+                .preference_manager = preference_manager_
             };
             final_result = tool->execute(step.input, context);
         } catch (const std::exception& ex) {
@@ -480,7 +484,8 @@ ToolResult ToolExecutor::executeOneStep(
             try {
                 ToolContext context{
                     .session_id = session_id,
-                    .session_manager = session_manager_
+                    .session_manager = session_manager_,
+                    .preference_manager = preference_manager_
                 };
                 final_result = fallback->execute(step.input, context);
             } catch (const std::exception& ex) {

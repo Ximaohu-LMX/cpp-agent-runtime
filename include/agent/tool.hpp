@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include "agent/result.hpp"
 #include "agent/session_manager.hpp"
+#include "agent/preference_manager.hpp"
 
 namespace agent {
 
@@ -14,6 +15,7 @@ namespace agent {
 struct ToolContext {
     std::string session_id;
     SessionManager& session_manager;
+    PreferenceManager& preference_manager;
 };
 
 class Tool {
