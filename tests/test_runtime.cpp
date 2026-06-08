@@ -17,9 +17,9 @@
 
 TEST(RuntimeTest, ExecuteDagPlanWithValueFromStep) {
     agent::ToolRegistry registry;
-    registry.registerTool(std::make_shared<tools::EchoTool>());
-    registry.registerTool(std::make_shared<tools::CalculatorTool>());
-    registry.registerTool(std::make_shared<tools::MemoryTool>());
+    registry.registerTool(std::make_unique<tools::EchoTool>());
+    registry.registerTool(std::make_unique<tools::CalculatorTool>());
+    registry.registerTool(std::make_unique<tools::MemoryTool>());
 
     agent::SessionManager session_manager;
     agent::TraceLogger trace_logger("logs");

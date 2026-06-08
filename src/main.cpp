@@ -38,18 +38,18 @@ int main(int argc, char** argv) {
 
         // 注册工具，手动有几个写几个
         agent::ToolRegistry registry;
-        registry.registerTool(std::make_shared<tools::CalculatorTool>());
-        registry.registerTool(std::make_shared<tools::MemoryTool>());
-        registry.registerTool(std::make_shared<tools::EchoTool>());
-        registry.registerTool(std::make_shared<tools::StructuredPreferenceTool>());
-        registry.registerTool(std::make_shared<tools::PreferenceUpdateTool>());
-        registry.registerTool(std::make_shared<tools::VectorRecallTool>());
-        registry.registerTool(std::make_shared<tools::KeywordRecallTool>());
-        registry.registerTool(std::make_shared<tools::HotRecallTool>());
-        registry.registerTool(std::make_shared<tools::MergeCandidatesTool>());
-        registry.registerTool(std::make_shared<tools::RankTool>());
-        registry.registerTool(std::make_shared<tools::RerankTool>());
-        registry.registerTool(std::make_shared<tools::ResponseBuilderTool>());
+        registry.registerTool(std::make_unique<tools::CalculatorTool>());
+        registry.registerTool(std::make_unique<tools::MemoryTool>());
+        registry.registerTool(std::make_unique<tools::EchoTool>());
+        registry.registerTool(std::make_unique<tools::StructuredPreferenceTool>());
+        registry.registerTool(std::make_unique<tools::PreferenceUpdateTool>());
+        registry.registerTool(std::make_unique<tools::VectorRecallTool>());
+        registry.registerTool(std::make_unique<tools::KeywordRecallTool>());
+        registry.registerTool(std::make_unique<tools::HotRecallTool>());
+        registry.registerTool(std::make_unique<tools::MergeCandidatesTool>());
+        registry.registerTool(std::make_unique<tools::RankTool>());
+        registry.registerTool(std::make_unique<tools::RerankTool>());
+        registry.registerTool(std::make_unique<tools::ResponseBuilderTool>());
 
         // 创建辅助组件
         agent::SessionManager session_manager;   // 管理会话状态（跨步骤共享数据）
