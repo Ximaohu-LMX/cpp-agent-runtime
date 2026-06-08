@@ -1,0 +1,96 @@
+{
+  "session_id": "s_recommend_full",
+  "steps": [
+    {
+      "id": "normalize_initial_preference",
+      "tool": "structured_preference",
+      "depends_on": [],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_delta": {
+          "last_query": "我想看一些偏 C++ 工程的视频",
+          "positive_tags": ["C++后端", "工程实践"],
+          "negative_tags": ["课程项目", "入门"],
+          "preferred_categories": ["视频"],
+          "rejected_categories": ["课程"]
+        }
+      }
+    },
+    {
+      "id": "update_preference",
+      "tool": "preference_update",
+      "depends_on": ["normalize_initial_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "preference_from_step": "normalize_initial_preference"
+      }
+    },
+    {
+      "id": "vector_recall",
+      "tool": "vector_recall",
+      "depends_on": ["update_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {}
+    },
+    {
+      "id": "keyword_recall",
+      "tool": "keyword_recall",
+      "depends_on": ["update_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {}
+    },
+    {
+      "id": "hot_recall",
+      "tool": "hot_recall",
+      "depends_on": ["update_preference"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {"top_n": 5}
+    },
+    {
+      "id": "merge_candidates",
+      "tool": "merge_candidates",
+      "depends_on": ["vector_recall", "keyword_recall", "hot_recall"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "candidates_from_steps": ["vector_recall", "keyword_recall", "hot_recall"]
+      }
+    },
+    {
+      "id": "rank",
+      "tool": "rank",
+      "depends_on": ["merge_candidates"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "candidates_from_step": "merge_candidates"
+      }
+    },
+    {
+      "id": "rerank",
+      "tool": "rerank",
+      "depends_on": ["rank"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "candidates_from_step": "rank"
+      }
+    },
+    {
+      "id": "response",
+      "tool": "response_builder",
+      "depends_on": ["rerank"],
+      "timeout_ms": 1000,
+      "max_retries": 0,
+      "input": {
+        "candidates_from_step": "rerank",
+        "top_n": 3
+      }
+    }
+  ]
+}

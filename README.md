@@ -70,7 +70,7 @@ depends_on 字段
 
 ------
 
-### 三阶段：交互式推荐场景建模
+### 三阶段：交互式推荐场景建模(已完成)
 
 目标：从“通用 Agent Runtime”进入“AI 助手推荐系统”业务场景。
 （思路更新：不再重点做自然语言关键词解析，默认LLM传回结构化信息，然后将其转成推荐系统可用的标准化偏好。）
@@ -129,120 +129,101 @@ TagNormalizer：负责中文 / 别名标签到标准标签的映射
 }
 ```
 ------
-### 原六阶段提前：DAG 数据传递与推荐链路骨架
-目标：在进入召回之前，先把工具间数据流打通，让后续每个工具天然跑在 DAG 里，避免返工。
 
-需要实现：
-```text
-按 step_id 保存输出
-value_from_step / input_from_step
-MergeCandidatesTool（空壳，先定义接口）
-ResponseBuilderTool（空壳，先定义接口）
-```
+### 四阶段：推荐主链路（召回 → 合并 → 排序 → 重排 → 响应）(已完成)
 
-典型执行图（此时工具内部可以是 mock）：
-```text
-structured_preference
-      ↓
-vector_recall ─┐
-keyword_recall ├── merge_candidates ── rank ── rerank ── response
-hot_recall    ─┘
-```
-后续四、五阶段的工具直接在 DAG 中开发，不需要临时串联方案
-MergeCandidatesTool / ResponseBuilderTool 先占位，后续填实现即可
+目标：把「用户结构化偏好 → 多路召回 → 候选合并 → 排序 → 负反馈重排 → 响应组装」完整跑通，
+所有工具直接以 DAG 节点的形式接入 Runtime，工具间通过 step 输出 / `*_from_step` 解耦。
 
-------
-
-### 四阶段：检索召回工具链
-
-目标：让系统真的能“找内容”。
-
-需要实现：
-
-```text
-RetrievalTool
-KeywordSearchTool
-TagRecallTool
-HotRecallTool
-Candidate 数据结构
-TopK 召回
-```
-
-推荐先做本地模拟数据，不急着接真实向量库。
-
-内容数据可以先是：
-
-```text
-video_id
-title
-tags
-category
-description
-score
-```
-
-这一阶段重点不是算法多强，而是打通：
-
-```text
-用户需求 -> 多路召回 -> 候选结果
-```
-
-------
-
-### 五阶段：排序与负反馈重排
-
-目标：体现推荐系统核心价值。
-
-需要实现：
-
-```text
-RankTool
-RerankTool
-Feedback-aware scoring
-负反馈降权
-正反馈加权
-TopK 截断
-```
-
-核心逻辑：
-
-```text
-用户喜欢的标签 / 类别：加权
-用户否定的标签 / 类别：降权
-与当前 query 更相关的内容：加权
-重复或低质量内容：降权
-```
-
-
-------
-
-### 六阶段：推荐链路 DAG 化（已提前）
-
-目标：把推荐系统链路放进 DAG Runtime。
+> 设计取舍：原计划中的「四（召回）/ 五（排序重排）/ 六（推荐链路 DAG 化）」三个阶段
+> 在工程实现上强耦合 —— 召回需要先有候选数据结构，排序需要先有候选，DAG 化需要前两者都存在 ——
+> 因此合并为同一个大阶段，按子步骤推进。
 
 典型执行图：
 
 ```text
-parse_query
-   ↓
-vector_recall ─┐
-keyword_recall ├── merge_candidates ── rank ── rerank ── response
-hot_recall    ─┘
+structured_preference ── update_preference
+                              │
+                ┌─────────────┼─────────────┐
+                ▼             ▼             ▼
+          vector_recall  keyword_recall  hot_recall
+                └─────────────┼─────────────┘
+                              ▼
+                       merge_candidates
+                              ▼
+                            rank
+                              ▼
+                           rerank
+                              ▼
+                       response_builder
 ```
 
-需要实现：
+参考 plan：`configs/sample_plan_4.json`。
+
+#### 4.1 物料库与候选数据结构
+
+- `agent::CatalogItem`（`include/agent/item_catalog.hpp`）：`id / title / tags / category / popularity`
+- `getItemCatalog()` 返回进程内单例，作为三路召回共享的物料源（当前是 10 条硬编码内容，后续可替换为按需加载实现）
+- 候选在召回环节产出，统一约定为：
+  ```json
+  {"id": "...", "title": "...", "tags": [...], "category": "...", "score": 0.x, "sources": ["vector"]}
+  ```
+- 标签 / 类别使用 `TagNormalizer` 归一化后的英文 ID，保证与 `PreferenceManager` 中的偏好可直接精确匹配；title 保留中文，供展示与关键词召回的子串匹配使用
+
+#### 4.2 三路召回
+
+| 工具 | 主要信号 | 打分逻辑 |
+|---|---|---|
+| `VectorRecallTool` | 偏好语义（伪向量相似度） | `tag_score * 0.7 + category_score * 0.3`，`score <= 0` 不进结果 |
+| `KeywordRecallTool` | `last_query` + 偏好标签 | 从 query 抽取 ASCII token（如 "C++"、"Redis"）→ title 子串命中 + 标签精确命中，每命中 +0.3，封顶 1.0 |
+| `HotRecallTool` | popularity + 偏好类别 | `popularity * (in_preferred_category ? 1.0 : 0.5)`，按 `top_n` 截断 |
+
+三路均只依赖 `PreferenceManager`（单一事实源）与 `getItemCatalog()`，无横向依赖，可天然并行。
+
+#### 4.3 候选合并 —— `MergeCandidatesTool`
+
+- 通过 `input.candidates_from_steps`（数组）从 `SessionManager` 读取每路召回的输出
+- 按 `id` 去重：分数取 `max(score)`，`sources` 取并集
+- 输出按 score 降序的统一候选数组，并附 `merged_count`
+
+#### 4.4 排序 —— `RankTool`
+
+在召回基础分上叠加偏好特征：
 
 ```text
-MergeCandidatesTool
-ResponseBuilderTool
-按 step_id 保存输出
-value_from_step / input_from_step
+rank_score = base_score
+           + 0.3 * (positive_tag 命中数)
+           + 0.2 * (preferred_category 命中)
+           + 0.1 * (sources 数 - 1)   // 多路共同召回的奖励
 ```
 
+#### 4.5 重排 —— `RerankTool`（负反馈）
+
+当前实现采用**硬过滤**：
+
+- 候选 `category` 命中 `rejected_categories` → 直接丢弃
+- 候选任一 `tag` 命中 `negative_tags` → 直接丢弃
+- 输出 `candidates`（保留集）+ `dropped`（含丢弃原因），方便 trace 与评测
+
+> 选择硬过滤的原因：与三阶段「负反馈覆盖正反馈」的语义保持一致，
+> 也契合「不要 X」这种明确否定的用户指令。
+> 若后续要支持「少看一些 X 但仍可出现」，可在此基础上扩展为权重衰减模式。
+
+#### 4.6 响应组装 —— `ResponseBuilderTool`
+
+- 按 `top_n` 截断
+- 产出 `items`（id / title / score / sources）+ 中文 `summary` 文案
+- 推荐链路的最后一跳，结果可直接交给上层 LLM / UI
+
+#### 4.7 端到端 DAG 串联
+
+- 全链路通过 `depends_on` + `*_from_step` 字段在 DAG 中显式连接，工具间不依赖隐式调用顺序
+- `vector_recall / keyword_recall / hot_recall` 在依赖图上同层，已具备并行执行的拓扑条件（实际并行执行留到五阶段）
+- `configs/sample_plan_4.json` 是完整可跑的 9-step plan，覆盖从结构化偏好到最终响应
 
 ------
 
-### 七阶段：同层并行执行
+### 五阶段：同层并行执行
 
 目标：优化多路召回延迟。
 
@@ -295,7 +276,7 @@ hot_recall
 
 ------
 
-### 八阶段：Trace / Metrics 完善
+### 六阶段：Trace / Metrics 完善
 
 目标：让系统可观测、可分析。
 
@@ -318,9 +299,9 @@ Agent 工程化
 
 ------
 
-### 九阶段：EvalRunner 自动化评测
+### 七阶段：EvalRunner 自动化评测
 
-目标：基于五阶段搭建的 EvalRunner 骨架，补全用例和报告生成。
+目标：基于推荐主链路构建 EvalRunner，补全用例和报告生成。
 ```text
 eval_cases.json
 EvalRunner
@@ -342,7 +323,7 @@ TopK 变化
 
 ------
 
-### 十阶段：工程增强
+### 八阶段：工程增强
 
 可以补：
 ```text

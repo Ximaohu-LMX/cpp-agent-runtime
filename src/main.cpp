@@ -17,6 +17,13 @@
 #include "tools/echo_tool.hpp"
 #include "tools/structured_preference_tool.hpp"
 #include "tools/preference_update_tool.hpp"
+#include "tools/vector_recall_tool.hpp"
+#include "tools/keyword_recall_tool.hpp"
+#include "tools/hot_recall_tool.hpp"
+#include "tools/merge_candidates_tool.hpp"
+#include "tools/rank_tool.hpp"
+#include "tools/rerank_tool.hpp"
+#include "tools/response_builder_tool.hpp"
 
 int main(int argc, char** argv) {
     // 获取计划文件路径
@@ -36,6 +43,13 @@ int main(int argc, char** argv) {
         registry.registerTool(std::make_shared<tools::EchoTool>());
         registry.registerTool(std::make_shared<tools::StructuredPreferenceTool>());
         registry.registerTool(std::make_shared<tools::PreferenceUpdateTool>());
+        registry.registerTool(std::make_shared<tools::VectorRecallTool>());
+        registry.registerTool(std::make_shared<tools::KeywordRecallTool>());
+        registry.registerTool(std::make_shared<tools::HotRecallTool>());
+        registry.registerTool(std::make_shared<tools::MergeCandidatesTool>());
+        registry.registerTool(std::make_shared<tools::RankTool>());
+        registry.registerTool(std::make_shared<tools::RerankTool>());
+        registry.registerTool(std::make_shared<tools::ResponseBuilderTool>());
 
         // 创建辅助组件
         agent::SessionManager session_manager;   // 管理会话状态（跨步骤共享数据）
@@ -69,7 +83,7 @@ int main(int argc, char** argv) {
         }
 
         std::cout << "\noutput:\n" << result.output.dump(2) << "\n";
-        std::cout << "\ntrace:\n" << result.trace.dump(2) << "\n";
+//        std::cout << "\ntrace:\n" << result.trace.dump(2) << "\n";
 //        std::cout << "\nmetrics:\n" << result.metrics.dump(2) << "\n";
 //
 //        std::cout << "\nsession:\n"

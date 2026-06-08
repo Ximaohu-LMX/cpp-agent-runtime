@@ -32,8 +32,16 @@ add_library(agent_runtime
     src/metrics_collector.cpp
     src/preference_manager.cpp
     src/tag_normalizer.cpp
+    src/item_catalog.cpp
     src/tools/structured_preference_tool.cpp
     src/tools/preference_update_tool.cpp
+    src/tools/vector_recall_tool.cpp
+    src/tools/keyword_recall_tool.cpp
+    src/tools/hot_recall_tool.cpp
+    src/tools/merge_candidates_tool.cpp
+    src/tools/rank_tool.cpp
+    src/tools/rerank_tool.cpp
+    src/tools/response_builder_tool.cpp
     src/tools/calculator_tool.cpp
     src/tools/memory_tool.cpp
     src/tools/echo_tool.cpp

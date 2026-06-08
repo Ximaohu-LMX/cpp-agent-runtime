@@ -5,6 +5,7 @@
 
 #include "agent/metrics_collector.hpp"
 #include "agent/plan_parser.hpp"
+#include "agent/preference_manager.hpp"
 #include "agent/session_manager.hpp"
 #include "agent/tool_executor.hpp"
 #include "agent/tool_registry.hpp"
@@ -23,6 +24,7 @@ TEST(RuntimeTest, ExecuteDagPlanWithValueFromStep) {
     agent::SessionManager session_manager;
     agent::TraceLogger trace_logger("logs");
     agent::MetricsCollector metrics_collector;
+    agent::PreferenceManager preference_manager;
 
     nlohmann::json json_plan = {
         {"session_id", "s1"},
@@ -88,6 +90,7 @@ TEST(RuntimeTest, ExecuteDagPlanWithValueFromStep) {
     agent::ToolExecutor executor(
         registry,
         session_manager,
+        preference_manager,
         trace_logger,
         metrics_collector
     );
